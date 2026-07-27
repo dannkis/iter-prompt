@@ -50,6 +50,69 @@ export function createHandler(store, provider = null) {
           await store.mutate(state => { state.experiments.push(experiment); return experiment; });
           return json(response, experiment, 201);
         }
+        if (['/api/upload', '/api/refine', '/api/evaluate', '/api/generate'].includes(path) && request.method === 'POST') {
+          const input = await body(request);
+          const state = await store.read();
+          const experiment = findExperiment(state, input.experimentId);
+          const iteration = input.iterationId ? findIteration(experiment, input.iterationId) : null;
+          if (path === '/api/upload') {
+            if (!['reference', 'output'].includes(input.role)) throw new AppError('Choose a reference or output image.');
+            if (input.role === 'reference' && experiment.iterations.some(item => item.output)) throw new AppError('Create a new experiment to use a different reference.', 409);
+            if (input.role === 'output' && (!iteration || iteration.output)) throw new AppError('Create an empty iteration before attaching another output.', 409);
+            const asset = await store.saveAsset(input.dataUrl, input.name);
+            const result = await store.mutate(current => {
+              const target = findExperiment(current, experiment.id);
+              if (input.role === 'reference') {
+                if (target.iterations.some(item => item.output)) throw new AppError('The reference is locked after an output is attached.', 409);
+                target.reference = asset;
+              } else {
+                const run = findIteration(target, iteration.id);
+                if (run.output) throw new AppError('This iteration already has an output.', 409);
+                run.output = asset; run.updatedAt = new Date().toISOString();
+              }
+              return asset;
+            });
+            return json(response, result, 201);
+          }
+          if (!iteration) throw new AppError('Select an iteration first.');
+          const key = experiment.id + ':' + iteration.id;
+          if (busy.has(key)) throw new AppError('This iteration already has an operation in progress.', 409);
+          busy.add(key);
+          try {
+            if (path === '/api/refine') {
+              const feedback = text(input.feedback || iteration.feedback, 'Feedback', 8000);
+              if (input.strategy === 'local') return json(response, localRefinement(experiment, iteration, feedback));
+              if (input.strategy !== 'openai') throw new AppError('Choose local or OpenAI refinement.');
+              if (!provider?.config().connected) throw new AppError('Add OPENAI_API_KEY to .env and restart the server to use model assistance.', 503);
+              const images = [];
+              if (experiment.reference) images.push(await assetData(experiment.reference));
+              if (iteration.output) images.push(await assetData(iteration.output));
+              return json(response, await provider.refine(experiment, iteration, feedback, images));
+            }
+            if (!provider?.config().connected) throw new AppError('Add OPENAI_API_KEY to .env and restart the server to use model assistance.', 503);
+            if (path === '/api/evaluate') {
+              const images = [await assetData(experiment.reference), await assetData(iteration.output)];
+              const evaluation = await provider.evaluate(experiment, iteration, images);
+              const result = await store.mutate(current => {
+                const run = findIteration(findExperiment(current, experiment.id), iteration.id);
+                run.evaluation = { ...evaluation, createdAt: new Date().toISOString() };
+                run.scores = validateScores(evaluation.scores); run.scoreSource = 'ai';
+                return run;
+              });
+              return json(response, result);
+            }
+            if (iteration.output) throw new AppError('Create a new iteration before generating another output.', 409);
+            const image = await provider.generate(iteration.prompt, await assetData(experiment.reference));
+            const asset = await store.saveAsset(image.dataUrl, 'generated-output.png');
+            const result = await store.mutate(current => {
+              const run = findIteration(findExperiment(current, experiment.id), iteration.id);
+              if (run.output || run.prompt !== iteration.prompt) throw new AppError('This iteration changed during generation. Its previous output was kept.', 409);
+              run.output = asset; run.generation = { model: image.model, createdAt: new Date().toISOString() };
+              return run;
+            });
+            return json(response, result);
+          } finally { busy.delete(key); }
+        }
         const match = /^\/api\/experiments\/([^/]+)(?:\/(iterations|export)(?:\/([^/]+))?)?$/.exec(path);
         if (!match) throw new AppError('Endpoint not found.', 404);
         const [, id, resource, iterationId] = match;
