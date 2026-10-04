@@ -17,8 +17,11 @@ async function body(request) {
     if (size > 18 * 1024 * 1024) throw new AppError('The request is too large.', 413);
     chunks.push(chunk);
   }
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  let parsed;
+  try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
   catch { throw new AppError('The request is not valid JSON.'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new AppError('The request body must be a JSON object.');
+  return parsed;
 }
 export function createHandler(store, provider = null) {
   const busy = new Set();

@@ -25,6 +25,7 @@ const descriptions = {
 };
 let workspace, config, experimentId, iterationId;
 let compareMode = 'side', suggestion = null, working = '';
+let refinementStrategy = 'local';
 let toastTimer;
 const experiment = () => workspace.experiments.find(item => item.id === experimentId);
 const iteration = () => experiment()?.iterations.find(item => item.id === iterationId);
@@ -87,7 +88,9 @@ function scorePanel(exp, run) {
     ).join('') + '</div><div class="score-actions"><button class="quiet-button" data-action="rubric">' + icon('settings') + 'Adjust weights</button><div style="display:flex;gap:7px">' +
     button('Save scores', 'save-scores', 'check', 'small', !run.output) + button('Evaluate with AI', 'evaluate', 'spark', 'small', !run.output || !exp.reference || !config.connected) + '</div></div>' +
     (run.evaluation ? '<div class="editor-body"><div class="model-notes"><strong>' + esc(run.evaluation.model) + ' · AI estimate</strong><p>' + esc(run.evaluation.summary) + '</p>' +
-    run.evaluation.observations.map(item => '<p><strong>' + esc(item.criterion) + ':</strong> ' + esc(item.note) + '</p>').join('') + '</div></div>' : '') + '</section>';
+    run.evaluation.observations.map(item => '<p><strong>' + esc(item.criterion) + ':</strong> ' + esc(item.note) + '</p>').join('') +
+    (run.evaluation.suggestions.length ? '<p><strong>Suggested next steps</strong></p><ul>' + run.evaluation.suggestions.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul>' +
+    button('Use model feedback', 'use-model-feedback', 'arrow', 'small') : '') + '</div></div>' : '') + '</section>';
 }
 function editorPanel(exp, run, index) {
   return '<section class="panel"><div class="panel-heading"><h2>' + icon('branch') + 'Prompt</h2><span class="version-badge">v' + String(index + 1).padStart(2, '0') + ' · ' + esc(run.branch) + '</span></div>' +
@@ -103,7 +106,7 @@ function editorPanel(exp, run, index) {
 function feedbackPanel(run) {
   return '<section class="panel feedback-panel"><div class="panel-heading"><h2>' + icon('spark') + 'Make the next one better</h2></div><div class="editor-body">' +
     '<label for="feedback" class="field-label">WHAT SHOULD CHANGE?</label><textarea id="feedback" class="feedback-input" maxlength="8000" placeholder="Be specific: the handle drifted, the texture is too smooth…">' + esc(run.feedback) + '</textarea>' +
-    '<div class="refine-options"><select id="refinement-strategy" aria-label="Refinement provider"><option value="local">Local rules</option><option value="openai" ' + (!config.connected ? 'disabled' : '') + '>OpenAI</option></select>' +
+    '<div class="refine-options"><select id="refinement-strategy" aria-label="Refinement provider"><option value="local" ' + (refinementStrategy === 'local' ? 'selected' : '') + '>Local rules</option><option value="openai" ' + (!config.connected ? 'disabled' : refinementStrategy === 'openai' ? 'selected' : '') + '>OpenAI</option></select>' +
     button('Refine prompt', 'refine', 'spark', 'lime') + '</div><p class="hint" style="margin-bottom:0">Local rules assemble your constraints. OpenAI can analyse the images and feedback.</p>' +
     (working ? '<div class="busy-indicator" role="status"><span class="spinner"></span>' + esc(working) + '</div>' : '') +
     (suggestion ? '<div class="suggestion"><div class="field-label">SUGGESTED REVISION <span class="word-count">' + esc(suggestion.provider === 'local' ? 'Local rules' : suggestion.model) + '</span></div>' +
@@ -149,11 +152,12 @@ function readScores() {
 }
 async function task(label, callback) {
   if (working) return;
+  let redraw = false;
   try {
-    await syncInputs(); working = label; render();
+    await syncInputs(); working = label; redraw = true; render();
     await callback();
     working = ''; await refresh();
-  } catch (error) { working = ''; render(); notify(error.message, true); }
+  } catch (error) { working = ''; if (redraw) render(); notify(error.message, true); }
 }
 function modal(title, content, actions = '') {
   const element = $('#modal');
@@ -233,6 +237,11 @@ const actions = {
       iterationId = result.id; suggestion = null; compareMode = 'side'; notify('New iteration created. Its output and scores start empty.');
     });
   },
+  'use-model-feedback': () => task('Saving model suggestions…', async () => {
+    const feedback = iteration().evaluation.suggestions.join('\n');
+    await api('/api/experiments/' + experimentId + '/iterations/' + iterationId, 'PATCH', { feedback });
+    notify('Model suggestions added to your feedback.');
+  }),
   evaluate: () => task('Comparing the images with your brief…', async () => { await api('/api/evaluate', 'POST', { experimentId, iterationId }); notify('AI evaluation saved. Review its estimates.'); }),
   generate: () => task('Generating your output. This can take a few minutes…', async () => { await api('/api/generate', 'POST', { experimentId, iterationId }); notify('Output generated and saved.'); }),
   export: () => task('Preparing the export…', async () => {
@@ -271,6 +280,9 @@ document.addEventListener('input', event => {
   }
   if (event.target.id === 'overlay-range') $('.overlay-layer').style.clipPath = 'inset(0 ' + (100 - event.target.value) + '% 0 0)';
   if (event.target.id === 'prompt') { $('#word-count').textContent = event.target.value.trim().split(/\s+/).length + ' words'; $('#draft-status').textContent = 'Unsaved draft edits'; }
+});
+document.addEventListener('change', event => {
+  if (event.target.id === 'refinement-strategy') refinementStrategy = event.target.value;
 });
 document.addEventListener('submit', async event => {
   if (!['experiment-form','iteration-form','brief-form','rubric-form'].includes(event.target.id)) return;
