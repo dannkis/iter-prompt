@@ -77,6 +77,6 @@ npm test
 
 Tests cover weighted scoring, iteration isolation, durable storage, upload checks, immutable output snapshots, portable exports, and model request contracts. Provider tests use mocks and do not require a key or make paid calls. Live account access and model quality need separate verification with your configured account.
 
-The [GitHub checks](https://github.com/dannkis/iter-prompt/actions) run the syntax checks and tests on pushes and pull requests.
+The [GitHub checks](https://github.com/dannkis/iter-prompt/actions) run the syntax checks and tests on pushes and pull requests. You can also use **Run workflow** in the Project checks page to run them manually.
 
 See [architecture](docs/ARCHITECTURE.md), [evaluation guidance](docs/EVALUATION.md), [verification notes](docs/VERIFICATION.md), and the [retrospective history](docs/HISTORY.md).
