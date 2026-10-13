@@ -13,4 +13,6 @@ Feature branches contain distinct implementations and are merged into `main`. Th
 | September | Model adapters, image edits, vision grading, provider and API tests |
 | October | Feedback reuse, documentation, browser verification, release preparation |
 
-The branches `feature/experiment-core`, `feature/local-workspace`, `feature/visual-studio`, `feature/model-assistance`, `fix/workspace-validation`, and `docs/project-guide` are retained locally as development references.
+The branches `feature/experiment-core`, `feature/local-workspace`, `feature/visual-studio`, `feature/model-assistance`, `fix/workspace-validation`, and `docs/project-guide` are retained as development references.
+
+The `fix/studio-persistence`, `chore/project-checks`, and `docs/local-preview` branches record browser fixes, readable source formatting, continuous checks, and release documentation on the actual creation date, 13 October 2026. Subsequent work uses its actual dates.

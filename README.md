@@ -4,6 +4,8 @@ A local workspace for improving visual prompts. Compare a reference with its out
 
 **History provenance:** This project was created on 13 October 2026. May–October commit dates are assigned retrospectively to illustrate development milestones. They do not record when the work actually happened.
 
+![The visual studio with reference comparison, scoring, prompt versions, and feedback](docs/assets/studio-preview.png)
+
 ## Direction
 
 - Keep the original reference visible throughout an experiment.
@@ -75,4 +77,6 @@ npm test
 
 Tests cover weighted scoring, iteration isolation, durable storage, upload checks, immutable output snapshots, portable exports, and model request contracts. Provider tests use mocks and do not require a key or make paid calls. Live account access and model quality need separate verification with your configured account.
 
-See [architecture](docs/ARCHITECTURE.md), [evaluation guidance](docs/EVALUATION.md), and the [retrospective history](docs/HISTORY.md).
+The [GitHub checks](https://github.com/dannkis/iter-prompt/actions) run the syntax checks and tests on pushes and pull requests.
+
+See [architecture](docs/ARCHITECTURE.md), [evaluation guidance](docs/EVALUATION.md), [verification notes](docs/VERIFICATION.md), and the [retrospective history](docs/HISTORY.md).
